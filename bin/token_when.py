@@ -80,24 +80,36 @@ class BaseTokenizer:
         return vocab
 
 
+GPT2_SPLIT_PATTERN = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
+
 class BytePairTokenizer(BaseTokenizer):
     def __init__(self) -> None:
         super().__init__()
+        self.pattern = GPT2_SPLIT_PATTERN
+        self.compiled_pattern = re.compile(self.pattern)
+        self.special_tokens = {}
+        self.inverse_special_tokens = {}
 
-    def train(self, text, vocab_zise):
-        num_merges = vocab_zise - 256
+    def train(self, text, vocab_size):
+        assert vocab_size >= 256, "Vocab size must be 256"
+        num_merges = vocab_size - 256
 
-        text_bytes = text.encode("utf-8")
-        ids = list(text_bytes)
+        text_chunks = re.findall(self.compiled_pattern, text)
+
+        ids = [list(tx.encode("utf-8")) for tx in text_chunks]
 
         merges = {}
         vocab = {idx: bytes([idx]) for idx in range(256)}
 
         for i in range(num_merges):
-            stats = get_stats(ids)
+            stats = {}
+
+            for chunk_ids in ids:
+                get_stats(chunk_ids, stats)
+
             top_pair = max(stats, key=stats.get)
             idx = 256 + i
-            ids = merge(ids, top_pair, idx)
+            ids = [merge(chunk_ids, top_pair, idx) for chunk_ids in ids]
             merges[top_pair] = idx
             vocab[idx] = vocab[top_pair[0]] + vocab[top_pair[1]]
             print(f"Merge {i+1}/{num_merges}: {top_pair} --> {idx}  | {vocab[idx]} had {stats[top_pair]} occurencies!!")
@@ -106,13 +118,23 @@ class BytePairTokenizer(BaseTokenizer):
         self.vocab = vocab
 
     def decode(self, ids):
-        tokens = b"".join([self.vocab[idx] for idx in ids])
+        part_bytes = []
+
+        for idx in ids:
+            if idx in self.vocab:
+                part_bytes.append(self.vocab[idx])
+            elif idx in self.inverse_special_tokens:
+                part_bytes.append(self.inverse_special_tokens[idx].encode("utf-8"))
+            else:
+                raise ValueError(f"Invalid token {idx}")
+
+        tokens = b"".join(part_bytes)
         text = tokens.decode("utf-8", errors="replace")
         return text
 
-    def encode(self, text):
-        text_bytes = text.encode("utf-8")
+    def _encode_chunk(self, text_bytes):
         ids = list(text_bytes)
+
         while len(ids) >= 2:
             stats = get_stats(ids)
             pair = min(stats, key=lambda p: self.merges.get(p, float("inf")))
@@ -122,13 +144,33 @@ class BytePairTokenizer(BaseTokenizer):
             ids = merge(ids, pair, idx)
         return ids
     
+    def encode_ordinary(self, text):
+        text_chunks = re.findall(self.compiled_pattern, text)
+
+        ids = []
+        for chunk in text_chunks:
+            chunk_bytes = chunk.encode("utf-8")
+            chunk_ids = self._encode_chunk(chunk_bytes)
+            ids.extend(chunk_ids)
+
+        return ids
+    
     def save_merges(self):
         with open("../data/merges.json", "w") as file:
-            json.dump(self.merges, file, indent=4)
+            db ={}
+            mer = {str(k): v for k, v in self.merges.items()}
+            vocab = {str(k): v.decode("utf-8", errors="replace") for k, v in self.vocab.items()}
+            db["merges"] = mer
+            db["vocab"] = vocab
+            json.dump(db, file, indent=4)
 
     def load_merges(self):
         with open("../data/merges.json", "r") as file:
-            self.merges = json.load(file)
+            db = json.load(file)
+            merges = {eval(k): v for k, v in db["merges"].items()}
+            vocab = {eval(k): v.encode("utf-8") for k, v in db["vocab"].items()}
+            self.merges = merges
+            self.vocab = vocab
     
 
 def get_data():
@@ -139,8 +181,11 @@ def get_data():
 def main():
     text = get_data()
     tokenizer = BytePairTokenizer()
-    tokenizer.train(text, 306)
-    ids = tokenizer.encode(text)
+    tokenizer.load_merges()
+    print("Loaded merges: ", len(tokenizer.merges))
+    print("Loaded vocab: ", len(tokenizer.vocab))
+    # tokenizer.train(text, 306)
+    ids = tokenizer.encode_ordinary(text)
     text_de = tokenizer.decode(ids)
 
     print("---")
