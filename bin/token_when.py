@@ -17,10 +17,10 @@ import datasets
 def args_parsing():
     argparser = argparse.ArgumentParser("Byte Pair Encoding Tokenizer")
     argparser.add_argument("--train", action="store_true", help="Train the tokenizer")
-    argparser.add_argument("--special", action="store_true", help="Register special tokens")
+    argparser.add_argument("--special", action="store_true", help="Register special tokens (all, none, none_raise)")
     argparser.add_argument("--text-path", type=str, help="Path to the text file")
-    argparser.add_argument("--load", action="store_true", help="Load the tokenizer")
-    argparser.add_argument("--save", action="store_true", help="Save the tokenizer")
+    argparser.add_argument("--load-mod", action="store_true", help="Load the tokenizer")
+    argparser.add_argument("--save-mod", action="store_true", help="Save the tokenizer")
     argparser.add_argument("-v", "--verbose", action="store_true", help="Verbose mode")
 
     return argparser.parse_args()
@@ -220,6 +220,10 @@ class BytePairTokenizer(BaseTokenizer):
             vocab = {eval(k): v.encode("utf-8") for k, v in db["vocab"].items()}
             self.merges = merges
             self.vocab = vocab
+
+    def view_tokenized_text(self, ids: list):
+        for idx in ids:
+            print(self.vocab[idx].decode("utf-8", errors="replace"), end="")
     
 
 def get_data():
@@ -229,18 +233,45 @@ def get_data():
 
 
 def get_corpus():
-    B = 4
-
     bookcorpus_train = datasets.load_dataset("bookcorpus", split="train")
     #  bookcorpus_val = datasets.load_dataset("bookcorpus")
 
     # divide the dataset in B parts
-    bookcorpus_train = bookcorpus_train.shard(num_shards=B, index=0)  # 1/B of the dataset
-    text = bookcorpus_train["text"]
-    return text
+    # bookcorpus_train = bookcorpus_train.shard(num_shards=B, index=0)  # 1/B of the dataset
+    text = bookcorpus_train["text"][:3000000]
+    print(text[:10])
+    return ' '.join(text)
+
+
+def get_wiki():
+    wiki = datasets.load_dataset("wikipedia", "20201201.en")
+    text = wiki["text"][:3000000]
+    print(text[:10])
+    return ' '.join(text)
 
 
 def main():
+    args = args_parsing()
+
+    if args.train:
+        text = get_data()
+        tokenizer = BytePairTokenizer()
+        tokenizer.train(text, 406)
+        if args.save_mod:
+            tokenizer.save_merges()
+
+    if args.load_mod:
+        tokenizer = BytePairTokenizer()
+        tokenizer.load_merges()
+    
+    if args.verbose:
+        print("Merges: ", tokenizer.merges)
+        print("Vocab: ", tokenizer.vocab)
+
+    if args.text_path:
+        with open(args.text_path, "r", encoding="utf-8") as f:
+            text = f.read()
+
     special_tokens = {
         '<|endoftext|>': 100257,
         '<|fim_prefix|>' : 100258,
@@ -249,12 +280,23 @@ def main():
         '<|endofprompt|>' : 100276
     }  # gpt2 special tokens
 
+    tokenizer.register_special_tokens(special_tokens)
+
+    ids = tokenizer.encode(text, args.special)
+    print("---")
+    print("Text Lenght: ", len(text))
+    print("Tokens length: ", len(ids))
+    # print("Original text == Decoded text? ", text_de == text)
+    print(f"Compression ratio: {len(text) / len(ids):.2f}X\n")
+
+
+      
+    '''
     text = get_corpus()
     tokenizer = BytePairTokenizer()
     # tokenizer.load_merges()
     # print("Loaded merges: ", len(tokenizer.merges))
     # print("Loaded vocab: ", len(tokenizer.vocab))
-    tokenizer.register_special_tokens(special_tokens)
     vocab_size = 406
     tokenizer.train(text, vocab_size)
     ids = tokenizer.encode(text)
@@ -268,6 +310,7 @@ def main():
     print(f"Compression ratio: {len(text) / len(ids):.2f}X\n")
 
     tokenizer.save_merges()
+    '''
 
 
 if __name__ == "__main__":
