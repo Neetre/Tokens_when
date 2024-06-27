@@ -290,6 +290,7 @@ def main():
         print("---")
         print("Text Lenght: ", len(text))
         print("Tokens length: ", len(ids))
+        print("Tokens: ", ids)
         # print("Original text == Decoded text? ", text_de == text)
         print(f"Compression ratio: {len(text) / len(ids):.2f}X\n")
 
