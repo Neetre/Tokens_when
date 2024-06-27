@@ -16,7 +16,5 @@ python token_when.py --help
 
 python token_when.py --load-mod
 
-PAUSE
-
 :End
 EXIT /B 0
