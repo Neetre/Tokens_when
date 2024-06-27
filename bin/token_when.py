@@ -18,7 +18,8 @@ def args_parsing():
     argparser = argparse.ArgumentParser("Byte Pair Encoding Tokenizer")
     argparser.add_argument("--train", action="store_true", help="Train the tokenizer")
     argparser.add_argument("--special", action="store_true", help="Register special tokens")
-    argparser.add_argument("--text-path", type=str, help="Path to the text file")
+    argparser.add_argument("--text-path-train", type=str, help="Path to the text file for train")
+    argparser.add_argument("--text-path-test", type=str, help="Path to the text file for test")
     argparser.add_argument("--load-mod", action="store_true", help="Load the tokenizer")
     argparser.add_argument("--save-mod", action="store_true", help="Save the tokenizer")
     argparser.add_argument("-v", "--verbose", action="store_true", help="Verbose mode")
@@ -187,10 +188,10 @@ class BytePairTokenizer(BaseTokenizer):
             special = {k: v for k, v in self.special_tokens.items() if k in allowed_special}
         else:
             raise ValueError(f"Invalid value for allowed_special: {allowed_special}")
-        
+
         if not special:
             return self.encode_ordinary(text)
-        
+
         special_pattern = "(" + "|".join(re.escape(k) for k in special) + ")"
         special_chunks = re.split(special_pattern, text)
 
@@ -223,11 +224,11 @@ class BytePairTokenizer(BaseTokenizer):
 
     def view_tokenized_text(self, ids: list):
         for idx in ids:
-            print(self.vocab[idx].decode("utf-8", errors="replace"), end="")
-    
+            print(f"{self.vocab[idx].decode('utf-8', errors='replace')}: {self.vocab[idx]}")
 
-def get_data():
-    with open("../data/input.txt", "r", encoding="utf-8") as f:
+
+def get_data(file_path="../data/input.txt"):
+    with open(file_path, "r", encoding="utf-8") as f:
         text = f.read()
     return text
 
@@ -254,23 +255,23 @@ def main():
     args = args_parsing()
 
     tokenizer = BytePairTokenizer()
-    text = get_data()
+    # text = get_data()
 
     if args.train:
-        text = get_data()
+        text = get_data(args.text_path_train)
         tokenizer.train(text, 406)
         if args.save_mod:
             tokenizer.save_merges()
 
     if args.load_mod:
         tokenizer.load_merges()
-    
+
     if args.verbose:
         print("Merges: ", tokenizer.merges)
         print("Vocab: ", tokenizer.vocab)
 
-    if args.text_path:
-        with open(args.text_path, "r", encoding="utf-8") as f:
+    if args.text_path_test:
+        with open(args.text_path_test, "r", encoding="utf-8") as f:
             text = f.read()
 
     special_tokens = {
@@ -283,15 +284,21 @@ def main():
 
     tokenizer.register_special_tokens(special_tokens)
 
-    ids = tokenizer.encode(text)
-    print("---")
-    print("Text Lenght: ", len(text))
-    print("Tokens length: ", len(ids))
-    # print("Original text == Decoded text? ", text_de == text)
-    print(f"Compression ratio: {len(text) / len(ids):.2f}X\n")
+    while True:
+        text = input("Enter text: ")
+        ids = tokenizer.encode(text)
+        print("---")
+        print("Text Lenght: ", len(text))
+        print("Tokens length: ", len(ids))
+        # print("Original text == Decoded text? ", text_de == text)
+        print(f"Compression ratio: {len(text) / len(ids):.2f}X\n")
 
+        # tokenizer.view_tokenized_text(ids)
 
-      
+        q = input("\n\nDo you want to continue? (y/n): ")
+        if q == "n":
+            break
+
     '''
     text = get_corpus()
     tokenizer = BytePairTokenizer()
