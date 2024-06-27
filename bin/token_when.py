@@ -6,9 +6,24 @@ https://en.wikipedia.org/wiki/Byte_pair_encoding
 Neetre 2024
 '''
 
+import argparse
+
 import regex as re
 import json
 
+import datasets
+
+
+def args_parsing():
+    argparser = argparse.ArgumentParser("Byte Pair Encoding Tokenizer")
+    argparser.add_argument("--train", action="store_true", help="Train the tokenizer")
+    argparser.add_argument("--special", action="store_true", help="Register special tokens")
+    argparser.add_argument("--text-path", type=str, help="Path to the text file")
+    argparser.add_argument("--load", action="store_true", help="Load the tokenizer")
+    argparser.add_argument("--save", action="store_true", help="Save the tokenizer")
+    argparser.add_argument("-v", "--verbose", action="store_true", help="Verbose mode")
+
+    return argparser.parse_args()
 
 def get_stats(ids: list, counts=None):
     """
@@ -27,7 +42,7 @@ def get_stats(ids: list, counts=None):
     return counts
 
 
-def merge(ids, pair, idx):
+def merge(ids: list, pair, idx: int):
     """
     Merge a pair of ids in a list of ids.
 
@@ -90,7 +105,7 @@ class BytePairTokenizer(BaseTokenizer):
         self.special_tokens = {}
         self.inverse_special_tokens = {}
 
-    def train(self, text, vocab_size):
+    def train(self, text: str, vocab_size: int):
         assert vocab_size >= 256, "Vocab size must be 256"
         num_merges = vocab_size - 256
 
@@ -117,7 +132,11 @@ class BytePairTokenizer(BaseTokenizer):
         self.merges = merges
         self.vocab = vocab
 
-    def decode(self, ids):
+    def register_special_tokens(self, special_tokens: dict):
+        self.special_tokens = special_tokens
+        self.inverse_special_tokens = {v: k for k, v in special_tokens.items()}
+
+    def decode(self, ids: list):
         part_bytes = []
 
         for idx in ids:
@@ -132,7 +151,7 @@ class BytePairTokenizer(BaseTokenizer):
         text = tokens.decode("utf-8", errors="replace")
         return text
 
-    def _encode_chunk(self, text_bytes):
+    def _encode_chunk(self, text_bytes: bytes):
         ids = list(text_bytes)
 
         while len(ids) >= 2:
@@ -143,8 +162,8 @@ class BytePairTokenizer(BaseTokenizer):
             idx = self.merges[pair]
             ids = merge(ids, pair, idx)
         return ids
-    
-    def encode_ordinary(self, text):
+
+    def encode_ordinary(self, text: str):
         text_chunks = re.findall(self.compiled_pattern, text)
 
         ids = []
@@ -154,7 +173,37 @@ class BytePairTokenizer(BaseTokenizer):
             ids.extend(chunk_ids)
 
         return ids
-    
+
+    def encode(self, text: str, allowed_special="none_raise"):
+        special = None
+        if allowed_special == "all":
+            special = self.special_tokens
+        elif allowed_special == "none":
+            special = {}
+        elif allowed_special == "none_raise":
+            special = {}
+            assert all(token not in text for token in self.special_tokens)
+        elif isinstance(allowed_special, set):
+            special = {k: v for k, v in self.special_tokens.items() if k in allowed_special}
+        else:
+            raise ValueError(f"Invalid value for allowed_special: {allowed_special}")
+        
+        if not special:
+            return self.encode_ordinary(text)
+        
+        special_pattern = "(" + "|".join(re.escape(k) for k in special) + ")"
+        special_chunks = re.split(special_pattern, text)
+
+        ids = []
+
+        for part in special_chunks:
+            if part in special:
+                ids.append(special[part])
+            else:
+                ids.extend(self.encode_ordinary(part))
+
+        return ids
+
     def save_merges(self):
         with open("../data/merges.json", "w") as file:
             db ={}
@@ -178,14 +227,37 @@ def get_data():
         text = f.read()
     return text
 
+
+def get_corpus():
+    B = 4
+
+    bookcorpus_train = datasets.load_dataset("bookcorpus", split="train")
+    #  bookcorpus_val = datasets.load_dataset("bookcorpus")
+
+    # divide the dataset in B parts
+    bookcorpus_train = bookcorpus_train.shard(num_shards=B, index=0)  # 1/B of the dataset
+    text = bookcorpus_train["text"]
+    return text
+
+
 def main():
-    text = get_data()
+    special_tokens = {
+        '<|endoftext|>': 100257,
+        '<|fim_prefix|>' : 100258,
+        '<|fim_middle|>' : 100259,
+        '<|fim_suffix|>' : 100260,
+        '<|endofprompt|>' : 100276
+    }  # gpt2 special tokens
+
+    text = get_corpus()
     tokenizer = BytePairTokenizer()
-    tokenizer.load_merges()
-    print("Loaded merges: ", len(tokenizer.merges))
-    print("Loaded vocab: ", len(tokenizer.vocab))
-    # tokenizer.train(text, 306)
-    ids = tokenizer.encode_ordinary(text)
+    # tokenizer.load_merges()
+    # print("Loaded merges: ", len(tokenizer.merges))
+    # print("Loaded vocab: ", len(tokenizer.vocab))
+    tokenizer.register_special_tokens(special_tokens)
+    vocab_size = 406
+    tokenizer.train(text, vocab_size)
+    ids = tokenizer.encode(text)
     text_de = tokenizer.decode(ids)
 
     print("---")
