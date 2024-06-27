@@ -17,7 +17,7 @@ import datasets
 def args_parsing():
     argparser = argparse.ArgumentParser("Byte Pair Encoding Tokenizer")
     argparser.add_argument("--train", action="store_true", help="Train the tokenizer")
-    argparser.add_argument("--special", action="store_true", help="Register special tokens (all, none, none_raise)")
+    argparser.add_argument("--special", action="store_true", help="Register special tokens")
     argparser.add_argument("--text-path", type=str, help="Path to the text file")
     argparser.add_argument("--load-mod", action="store_true", help="Load the tokenizer")
     argparser.add_argument("--save-mod", action="store_true", help="Save the tokenizer")
@@ -253,15 +253,16 @@ def get_wiki():
 def main():
     args = args_parsing()
 
+    tokenizer = BytePairTokenizer()
+    text = get_data()
+
     if args.train:
         text = get_data()
-        tokenizer = BytePairTokenizer()
         tokenizer.train(text, 406)
         if args.save_mod:
             tokenizer.save_merges()
 
     if args.load_mod:
-        tokenizer = BytePairTokenizer()
         tokenizer.load_merges()
     
     if args.verbose:
@@ -282,7 +283,7 @@ def main():
 
     tokenizer.register_special_tokens(special_tokens)
 
-    ids = tokenizer.encode(text, args.special)
+    ids = tokenizer.encode(text)
     print("---")
     print("Text Lenght: ", len(text))
     print("Tokens length: ", len(ids))
