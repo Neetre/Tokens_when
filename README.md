@@ -7,7 +7,10 @@
 
 ## Description
 
-This is a simple script that allows you to convert a string into a list of tokens. The script is written in Python and uses the `re` module to split the string into tokens. The script takes a string as input and returns a list of tokens. The script can be used to tokenize text for natural language processing tasks.
+This is a simple script that allows you to convert a string into a list of tokens.
+The script is written in Python and uses a custom tokenizer to split the string into tokens.
+It takes a string as input and returns a list of tokens.
+Tokenizers are usually used for NLP tasks.
 
 ## Requirements
 
