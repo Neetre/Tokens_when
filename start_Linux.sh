@@ -1,6 +1,6 @@
 #!/bin/bash
 
-source ./setup/setup_Linux.shù
+source ./setup/setup_Linux.sh
 
 clear
 
