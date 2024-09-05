@@ -34,6 +34,9 @@ They will also start the app automatically.
 
     The `--help` flag displays available command-line arguments.
 
+Here is an example of the CLI in action:
+![CLI](./data/readme/cli.png)
+
 ### GUI
 
 Double click on the *start files* for your OS, and it should open a windows with the program running after setting up the environment, like I wrote in the **Requirements** area.
